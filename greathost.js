@@ -45,38 +45,42 @@ async function sendTelegramMessage(message) {
     
     // === 2. 状态检查与自动开机 (仅作为辅助动作) ===
     console.log("📊 正在检查服务器实时状态...");
-    
+
+    // 放在 try 块的这个位置是安全的，只要不放在 if 里面即可
+    let serverStarted = false;
+
     // 1. 获取当前状态文字
     const statusText = await page.locator('.status-text, .server-status').first().textContent().catch(() => 'unknown');
     const statusLower = statusText.trim().toLowerCase();
-    
+
     // 2. 执行判定与点击动作
     if (statusLower.includes('offline') || statusLower.includes('stopped') || statusLower.includes('离线')) {
         console.log(`⚡ 检测到离线 [${statusText}]，尝试触发启动...`);
-        
-        try {
-            // 使用 SVG 结构精准定位三角形启动按钮
-            const startBtn = page.locator('button.btn-start[title="Start Server"]').first();
-            const isDisabled = await startBtn.getAttribute('disabled');
 
-            if (await startBtn.isVisible() && isDisabled === null) {
+        try {
+            // 使用 SVG 结构精准定位三角形启动按钮 (根据源码 button.btn-start title="Start Server")
+            const startBtn = page.locator('button.btn-start[title="Start Server"]').first();
+            
+            // 检查按钮是否可见，且没有 disabled 属性
+            if (await startBtn.isVisible() && await startBtn.getAttribute('disabled') === null) {
                 await startBtn.click();
-                // 注意：请确保你在 try 块的最顶部（或登录前）已经写了 let serverStarted = false;
+                
+                // 标记变量为 true，后面的通知会显示 "✅ 已触发启动"
                 serverStarted = true; 
+                
                 console.log("✅ 启动指令已发出");
-                await page.waitForTimeout(1000); // 仅做短暂缓冲
+                // 仅等待 1 秒让请求发出去，立刻继续，不浪费时间
+                await page.waitForTimeout(1000); 
             } else {
-                console.log("⚠️ 启动按钮不可见或已被禁用，跳过启动动作。");
+                console.log("⚠️ 启动按钮不可用(可能正在冷却或未找到)，跳过启动。");
             }
         } catch (e) {
-            console.log("ℹ️ 尝试启动时遇到错误，忽略并继续后续流程...");
+            // 这一步报错不应该影响主流程，所以 catch 里只打印日志，不抛出错误
+            console.log("ℹ️ 辅助启动步骤轻微异常，忽略并继续后续续期...");
         }
-    } else if (statusLower.includes('pending')) {
-        console.log("⏳ 服务器正在启动中 (Pending)，无需操作。");
     } else {
-        console.log(`ℹ️ 服务器当前状态为 [${statusText}]，运行正常。`);
+        console.log(`ℹ️ 服务器状态 [${statusText}] 正常，无需启动。`);
     }
-
         
     // === 不管启动结果，强制进入账单页 ===
     // === 3. 点击 Billing 图标进入账单页 ===
