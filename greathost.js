@@ -42,19 +42,37 @@ async function sendTelegramMessage(message) {
     console.log("✅ 登录成功！");
     await page.waitForTimeout(2000);
 
-    // === 2. 状态检查与自动开机 ===
-    console.log("📊 检查服务器实时状态...");
-    const statusText = await page.locator('.server-status, #server-status-detail, .status-badge').first().textContent().catch(() => 'unknown');
-    const statusLower = statusText.toLowerCase();
     
-    let serverStarted = false;
-    if (statusLower.includes('offline') || statusLower.includes('stop') || statusLower.includes('离线')) {
-      console.log("⚡ 服务器离线，尝试启动...");
-      const startBtn = page.locator('.server-actions button, .server-main-action button').first(); 
-      await startBtn.click();
-      await page.waitForTimeout(3000); 
-      serverStarted = true;
-      console.log("✅ 启动命令已发送");
+    // === 5. 提前提取 ID ===
+    // 假设当前 URL 是 https://greathost.es/manage/4d4e3deb-c95d-4322-a8eb-59289bc5f8b3
+    let serverId = page.url().split('/').pop();
+    
+    // 容错处理：如果 URL 结尾带参数（如 ?tab=billing），排除干扰
+    if (serverId && serverId.includes('?')) {
+        serverId = serverId.split('?')[0];
+    }  
+    console.log(`🆔 解析到 Server ID: ${serverId}`);
+
+    // === 2. 状态检查与自动开机 (利用提取到的 ID) ===
+    const statusText = await page.locator('.status-text, .server-status').first().textContent().catch(() => 'unknown');
+    const statusLower = statusText.trim().toLowerCase();
+
+    if (statusLower.includes('offline') || statusLower.includes('stopped')) {
+        console.log(`⚡ 服务器离线，使用解析到的 ID [${serverId}] 启动...`);
+        
+        await page.evaluate(async (id) => {
+            const fakeEvent = {
+                preventDefault: () => {},
+                stopPropagation: () => {},
+                currentTarget: document.querySelector('.btn-start') || document.createElement('button')
+            };
+            if (typeof handleQuickPower === 'function') {
+                // 使用动态解析出的 id
+                await handleQuickPower(id, 'start', fakeEvent);
+            }
+        }, serverId);
+        
+        console.log("✅ 启动指令发送成功");
     }
 
     // === 3. 点击 Billing 图标进入账单页 ===
@@ -82,8 +100,8 @@ async function sendTelegramMessage(message) {
 
     
     // === 5. 提前提取 ID，防止页面跳转后丢失上下文 ===
-    const serverId = page.url().split('/').pop() || 'unknown';
-    console.log(`🆔 解析到 Server ID: ${serverId}`);    
+    //const serverId = page.url().split('/').pop() || 'unknown';
+    //console.log(`🆔 解析到 Server ID: ${serverId}`);    
 
     // === 6. 等待异步数据加载 (直到 accumulated-time 有数字) ===    
     const timeSelector = '#accumulated-time';
@@ -146,7 +164,7 @@ if (afterHours > beforeHours) {
                     `📅 <b>执行时间:</b> ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`;
     
     await sendTelegramMessage(message);
-    console.log("🎉 续期成功通知已发送");
+    console.log("🎉 续期成功 🎉");
 } else {
       const message = `⚠️ <b>GreatHost 续期未生效</b>\n\n` +
                       `🆔 <b>服务器ID:</b> <code>${serverId}</code>\n` +
@@ -155,6 +173,7 @@ if (afterHours > beforeHours) {
                       `📅 <b>检查时间:</b> ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}\n` +
                       `💡 <b>提示:</b> 时间未增加，请检查手动确认。`;
       await sendTelegramMessage(message);
+      console.log("🚨 续期失败 🚨 ");
     }  
   } catch (err) {
     console.error("❌ 运行时错误:", err.message);
