@@ -171,7 +171,7 @@ async function sendTelegramMessage(message) {
     const afterHoursText = await page.textContent(timeSelector);
     const afterHours = parseInt(afterHoursText.replace(/[^0-9]/g, '')) || 0;
 
-    // === 12. 最终通知 (根据接口反馈优化) ===
+    // === 13. 最终通知 (根据接口反馈优化) ===
     if (afterHours > beforeHours) {
         // 场景 A：成功增加时间
         const message = `🎉 <b>GreatHost 续期成功</b>\n\n` +
