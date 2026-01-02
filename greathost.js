@@ -141,28 +141,65 @@ async function sendTelegramMessage(message) {
     return; // 结束脚本，不执行后面的点击操作
 }
     
-    // === 10. 执行续期 ===
-    console.log("⚡ 正在执行续期点击...");
-    await renewBtn.click();
+// === 10. 执行续期 (三保险强力点击) ===
+    console.log("⚡ 启动强力续期流程...");
 
-    // === 11. 等待接口返回并处理（源代码中使用了 fetch，这里等待页面响应） ===
-          // 等待 8 秒让后端处理
-    await page.waitForTimeout(8000);     
-          // 检查页面上是否弹出了这个错误文本（通常是红色提示框）
+    try {
+        // 第一保险：使用 Playwright 的高级点击（带人工模拟延迟）
+        await renewBtn.click({ 
+            force: true, 
+            delay: 100, 
+            timeout: 5000 
+        });
+        console.log("👉 [1/3] Playwright 物理点击已尝试");
+
+        // 第二保险：直接在浏览器内部触发 DOM 原生事件
+        await page.evaluate(() => {
+            const btn = document.querySelector('#renew-free-server-btn');
+            if (btn) {
+                btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+                btn.click(); // 触发点击
+            }
+        });
+        console.log("👉 [2/3] 浏览器原生事件已注入");
+
+        // 第三保险：强制触发页面可能绑定的逻辑函数
+        await page.evaluate(() => {
+            if (typeof renewFreeServer === 'function') {
+                renewFreeServer(); 
+            }
+        }).catch(() => {}); 
+        console.log("👉 [3/3] 逻辑函数检查完毕");
+
+    } catch (e) {
+        console.log("🚨 点击执行异常:", e.message);
+    }
+
+    // === 11. 等待接口返回并处理 ===
+    console.log("⏳ 等待 10 秒处理异步请求与反馈...");
+    await page.waitForTimeout(10000); 
+
+    // 检查页面上是否弹出了错误文本（如 5 días）
     const errorMsg = await page.locator('.toast-error, .alert-danger').textContent().catch(() => '');
-    const isMaxedOut = errorMsg.includes('5 días') || beforeHours >= 120;         
-         // 即使刷新超时，也继续执行后续逻辑，尝试读取时间
-    await page.reload({ waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => console.log("⚠️ 页面刷新超时，尝试直接读取数据..."));
-    
+    const isMaxedOut = errorMsg.includes('5 días') || beforeHours >= 120;
+
+    // 刷新页面：降低等待门槛，增加超时捕获
+    console.log("🔄 刷新页面同步数据...");
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 20000 })
+              .catch(() => console.log("⚠️ 页面刷新超时，尝试直接读取数据..."));
+
     // === 12. 再次等待数据刷新 ===
     await page.waitForFunction(sel => {
-      const el = document.querySelector(sel);
-      return el && /\d+/.test(el.textContent);
-    }, timeSelector, { timeout: 5000 }).catch(() => {});  // 即使刷新失败也等5秒
-            
-           // 获取续期后时间
+        const el = document.querySelector(sel);
+        return el && /\d+/.test(el.textContent);
+    }, timeSelector, { timeout: 10000 }).catch(() => {});
+
+    // === 12.1 获取续期后时间 ===
     const afterHoursText = await page.textContent(timeSelector);
     const afterHours = parseInt(afterHoursText.replace(/[^0-9]/g, '')) || 0;
+    
+    console.log(`📊 最终确认: 之前 ${beforeHours}h -> 之后 ${afterHours}h`);
 
     // === 13. 最终通知 (根据接口反馈优化) ===
     if (afterHours > beforeHours) {
