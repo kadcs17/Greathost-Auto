@@ -267,75 +267,69 @@ async function sendTelegramMessage(message) {
     try {
         console.log("⏳ 正在等待数据渲染...");
         
-        // 1. 等待条件优化：文字中必须包含数字，且不只是孤零零的 "0" (除非之前就是0)
         await page.waitForFunction((sel, pre) => {
             const el = document.querySelector(sel);
             if (!el) return false;
             const current = parseInt(el.textContent.replace(/[^0-9]/g, ''));
-            // 只有当获取到有效数字，且 (数字发生了变化 或 数字大于0) 时才通过
             return !isNaN(current) && (current > 0 || current !== pre);
         }, timeSelector, beforeHours, { timeout: 15000 });
 
-        // 2. 提取数字
         const afterHoursText = await page.textContent(timeSelector);
         afterHours = parseInt(afterHoursText.replace(/[^0-9]/g, '')) || 0;
 
-        // 3. 深度补救：如果读到 0 但之前大于 0，说明页面渲染还没到位，再等 3 秒重读一次
         if (afterHours === 0 && beforeHours > 0) {
             console.log("⚠️ 检测到异常 0h，尝试二次重读...");
             await page.waitForTimeout(3000);
             const retryText = await page.textContent(timeSelector);
             afterHours = parseInt(retryText.replace(/[^0-9]/g, '')) || 0;
         }
-        
     } catch (e) {
         console.log("⚠️ 数据同步超时，将使用刷新前的时间进行判定。");
-        afterHours = beforeHours; // 超时补救：至少保证不会显示为 0h
+        afterHours = beforeHours; 
     }
 
-    // 最终安全检查：如果 afterHours 依然为 0，强制兜底防止误报
     if (afterHours === 0 && beforeHours > 0) {
         afterHours = beforeHours;
     }
     
     console.log(`📊 判定数据: 之前 ${beforeHours}h -> 之后 ${afterHours}h`);
 
-// === 13. 智能逻辑判定 (优化整合版) ===
-    
-    // 基础变量初始化
+    // === 13. 智能逻辑判定 ===        
     let statusIcon = '🚨';
-    let statusTitle = '续期失败';
-    let tip = `尝试续期后时间未增加 (仍为 ${afterHours}h)`;
+    let statusTitle = '续期结果待核实';
+    let tip = '';
 
-    // 情况 A：续期成功 (时间确实增长了)
     if (afterHours > beforeHours) {
         statusIcon = '🎉';
         statusTitle = '续期成功';
-        tip = `时长已从 ${beforeHours}h 成功增加至 ${afterHours}h`;
+        tip = `时长已从 ${beforeHours}h 成功增加至 ${afterHours}h。`;
     } 
-    // 情况 B：判定为满额或接近满额 (无需续期)
-    // 逻辑：页面报错5天上限、或者原本就>=120、或者刷新后时间在108-120之间且未变动
     else if (
-        errorMsg.includes('5 días') || 
+        (typeof errorMsg !== 'undefined' && errorMsg.includes('5 días')) || 
         beforeHours >= 120 || 
         (afterHours === beforeHours && afterHours >= 108)
     ) {
         statusIcon = '✅';
         statusTitle = '暂无需续期';
         tip = afterHours >= 108 
-            ? `当前时长 ${afterHours}h 已接近或达到上限。` 
-            : `服务器反馈：已达5天上限。`;
+            ? `当前时长 ${afterHours}h 已接近 120h 上限，系统保护中。` 
+            : `服务器反馈：已达 5 天续期上限。`;
     }
-    // 情况 C：真正的异常 (时间在低位且点击后没反应)
+    else if (afterHours === beforeHours) {
+        statusIcon = '⏳'; 
+        statusTitle = '时长未刷新';
+        tip = `点击了续期但时长仍为 ${afterHours}h。可能是后端延迟，请稍后在网页端检查。`;
+    }
     else {
-        // 保持初始化的“续期失败”状态，但记录更详细的对比
-        tip = `点击续期后数据未同步。之前: ${beforeHours}h | 之后: ${afterHours}h`;
+        statusIcon = '❌';
+        statusTitle = '数据异常';
+        tip = `检测到时长离奇变动：从 ${beforeHours}h 变为 ${afterHours}h。建议人工检查。`;
     }
 
-// === 14. 发送正常消息 ===
+    // === 14. 发送正常消息 ===
     await sendTelegramMessage(getReport(statusIcon, statusTitle, afterHours, tip));   
 
-  } catch (err) {
+  } catch (err) { // 这个 } 闭合的是脚本主体部分的 try
     console.error("❌ 脚本运行崩溃:", err.message);
 
     if (!err.message.includes("Proxy Check Failed")) {
@@ -356,13 +350,12 @@ async function sendTelegramMessage(message) {
     }    
 
   } finally {
-    // 只有当 browser 成功启动并拥有 close 方法时才调用
-    if (browser && typeof browser.close === 'function') {
+    if (typeof browser !== 'undefined' && browser && typeof browser.close === 'function') {
         try {
             console.log("🧹 [Exit] 正在关闭浏览器...");
             await browser.close();
         } catch (closeErr) {
-            console.error("⚠️ 关闭浏览器时发生异常 (可能已提前关闭):", closeErr.message);
+            console.error("⚠️ 关闭浏览器时发生异常:", closeErr.message);
         }
     }
   }
