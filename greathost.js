@@ -3,6 +3,10 @@ const PASSWORD = process.env.GREATHOST_PASSWORD || '';
 const CHAT_ID = process.env.CHAT_ID || '';
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 
+// === 新增：代理配置 (如果不需要代理，留空即可) ===
+// 建议通过 GitHub Secrets 传递：process.env.PROXY_URL
+const PROXY_URL = process.env.PROXY_URL || "socks5://admin123:admin321@138.68.253.225:30792";
+
 const { chromium } = require("playwright");
 const https = require('https');
 
@@ -26,7 +30,13 @@ async function sendTelegramMessage(message) {
   const LOGIN_URL = `${GREATHOST_URL}/login`;
   const HOME_URL = `${GREATHOST_URL}/dashboard`;
 
-  const browser = await chromium.launch({ headless: true });
+  // --- 修改开始：支持代理启动 ---
+  const launchOptions = { headless: true };
+  if (PROXY_URL && PROXY_URL.trim()) {
+      launchOptions.proxy = { server: PROXY_URL };
+  }
+  const browser = await chromium.launch(launchOptions);
+  // --- 修改结束 ---
 // 增加 User-Agent 伪装，让它看起来像真实的 Windows Chrome
   const context = await browser.newContext({
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -40,7 +50,7 @@ async function sendTelegramMessage(message) {
         // 覆盖 webdriver 属性
         Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
         // 模拟插件列表
-        Object.defineProperty(navigator, 'languages', { get: () => ['zh-CN', 'zh', 'en'] });
+        Object.defineProperty(navigator, 'languages', { get: () => ['es-ES', 'es', 'en'] });
         // 伪造 WebGL 指纹
         const getParameter = WebGLRenderingContext.prototype.getParameter;
         WebGLRenderingContext.prototype.getParameter = function(parameter) {
@@ -52,6 +62,29 @@ async function sendTelegramMessage(message) {
   // 抹除 Playwright 特征  
 
   try {
+    // --- 新增：代理 IP 检查与熔断机制 ---
+    if (PROXY_URL && PROXY_URL.trim()) {
+      console.log("🌍 [Check] 正在检测代理 IP...");
+      try {
+        await page.goto("https://api.ipify.org?format=json", { timeout: 20000 });
+        const ipInfo = JSON.parse(await page.innerText('body'));
+        console.log(`✅ 当前出口 IP: ${ipInfo.ip}`);
+        
+        // 校验 IP 前缀（可选）需要设置和sock5代码IP头一样
+        if (!ipInfo.ip.startsWith("138.68")) {
+          console.log(`⚠️ 警告: IP (${ipInfo.ip}) 似乎不是预期的代理 IP！`);
+        }
+      } catch (e) {
+        const errorMsg = `❌ 代理检查失败: ${e.message}`;
+        console.error(errorMsg);
+        await sendTelegramMessage(`🚨 <b>GreatHost 代理异常</b>\n${errorMsg}`);
+        throw new Error("Proxy Check Failed - 脚本停止以防止直连"); 
+      }
+    } else {
+      console.log("🌍 [Check] 未设置代理，跳过检测。");
+    }
+    // --- 新增结束 ---
+
     // === 1. 登录 ===
     console.log("🔑 打开登录页：", LOGIN_URL);
     await page.goto(LOGIN_URL, { waitUntil: "networkidle" });
@@ -153,7 +186,7 @@ async function sendTelegramMessage(message) {
           // 9.2. 组装消息：通知用户还在冷却，并显示当前已累计的时间
     const message = `⏳ <b>GreatHost 还在冷却中</b>\n\n` +
                     `🆔 <b>服务器ID:</b> <code>${serverId}</code>\n` +
-                    `⏰ <b>剩余时间:</b> ${waitTime} 分钟\n` +
+                    `⏰ <b>冷却时间:</b> ${waitTime} 分钟\n` +
                     `📊 <b>当前累计:</b> ${beforeHours}h\n` +
                     `🚀 <b>服务器状态:</b> ${serverStarted ? '✅ 已触发启动' : '运行中'}\n` +
                     `📅 <b>检查时间:</b> ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`;
@@ -273,8 +306,8 @@ async function sendTelegramMessage(message) {
         // 场景 B：判定为满额/接近满额
         const message = `✅ <b>GreatHost 已达上限</b>\n\n` +
                         `🆔 <b>ID:</b> <code>${serverId}</code>\n` +
-                        `⏰ <b>当前:</b> ${afterHours}h\n` +
-                        `🚀 <b>状态:</b> ${serverStarted ? '✅ 已触发启动' : '运行正常'}\n` +
+                        `⏰ <b>剩余时间:</b> ${afterHours}h\n` +
+                        `🚀 <b>服务器状态:</b> ${serverStarted ? '✅ 已触发启动' : '运行正常'}\n` +
                         `📅 <b>检查时间:</b> ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}\n` +      
                         `💡 <b>提示:</b> 累计时长较高，暂无需续期。`;
         await sendTelegramMessage(message);
@@ -284,17 +317,19 @@ async function sendTelegramMessage(message) {
         // 场景 C：真正的失败（时间没到108却没增加）
         const message = `⚠️ <b>GreatHost 续期未生效</b>\n\n` +
                         `🆔 <b>ID:</b> <code>${serverId}</code>\n` +
-                        `⏰ <b>当前:</b> ${beforeHours}h\n` +
+                        `⏰ <b>剩余时间:</b> ${beforeHours}h\n` +
                         `🚀 <b>服务器状态:</b> ${serverStarted ? '✅ 已触发启动' : '运行中'}\n` +
                         `📅 <b>检查时间:</b> ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}\n` +
                         `💡 <b>提示:</b> 时间未增加，请手动检查确认。`;            
         await sendTelegramMessage(message);    
         console.log(" 🚨 续期失败 🚨 ");
     }  
-     } catch (err) {    
-       console.error(" ❌ 运行时错误 ❌ :", err.message);
-       await sendTelegramMessage(` 🚨 <b>GreatHost 脚本报错</b> 🚨 \n<code>${err.message}</code>`);
-     } finally {    
-       await browser.close();
-     }
-   })();
+     } catch (err) {
+    console.error("❌ 运行时错误:", err.message);    
+    if (!err.message.includes("Proxy Check Failed")) {
+       await sendTelegramMessage(`🚨 <b>GreatHost 执行失败</b>\n<code>${err.message}</code>`);
+    }
+  } finally {
+    if (browser) await browser.close();
+  }
+})();
