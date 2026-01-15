@@ -150,11 +150,24 @@ def run_task():
             driver.execute_script("document.querySelector('.btn-billing-compact').click();")
             time.sleep(3)
 
-        # === 4. 点击 View Details 进入详情页 (JS 1:1) ===
-        print("🔍 点击 View Details...")
-        driver.find_element(By.LINK_TEXT, 'View Details').click()
-        print("⏳ 已进入详情页，等待3秒...")
-        time.sleep(3)
+        # === 4. 点击 View Details 进入详情页 (增加稳健性) ===
+        print("🔍 正在定位 View Details 链接...")
+        try:
+            # 等待 View Details 链接出现并可点击
+            view_details_btn = wait.until(EC.element_to_be_clickable((By.LINK_TEXT, 'View Details')))
+            
+            # 模拟真人：滚动到视图中心
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", view_details_btn)
+            time.sleep(1)
+            
+            view_details_btn.click()
+            print("✅ 已进入详情页，等待3秒加载数据...")
+            time.sleep(3)
+        except Exception as e:
+            print(f"❌ 定位 View Details 失败: {e}")
+            # 备用方案：尝试通过 CSS 选择器定位（有时文本匹配会失效）
+            driver.execute_script("document.querySelector('a[href*=\"details\"]').click();")
+            time.sleep(3)
 
         # === 5. 提前提取 ID (JS 1:1) ===
         server_id = driver.current_url.split('/')[-1] or 'unknown'
