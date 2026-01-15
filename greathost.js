@@ -101,7 +101,7 @@ async function sendTelegramMessage(message) {
       }
     } 
 
-    // === 1. 登录 ===
+// === 1. 登录 ===
     console.log("🔑 打开登录页：", LOGIN_URL);
     await page.goto(LOGIN_URL, { waitUntil: "networkidle" });
     await page.fill('input[name="email"]', EMAIL);
@@ -113,14 +113,14 @@ async function sendTelegramMessage(message) {
     console.log("✅ 登录成功！");
     await page.waitForTimeout(2000);
     
-    // === 2. 状态检查与自动开机 (仅作为辅助动作) ===
+// === 2. 状态检查与自动开机 (仅作为辅助动作) ===
     console.log("📊 正在检查服务器实时状态...");
     
     let serverStarted = false;
-            // 2.1 获取当前服务器状态文字
+            // a. 获取当前服务器状态文字
     const statusText = (await page.locator('.status-text, .server-status').first().textContent().catch(() => 'unknown')) || 'unknown';
     const statusLower = statusText.trim().toLowerCase();
-            // 2.2 执行判定与点击动作
+            // b. 执行判定与点击动作
     if (statusLower.includes('offline') || statusLower.includes('stopped') || statusLower.includes('离线')) {
         console.log(`⚡ 检测到离线 [${statusText}]，尝试触发启动...`);
 
@@ -146,7 +146,7 @@ async function sendTelegramMessage(message) {
         console.log(`ℹ️ 服务器状态 [${statusText}] 正常，无需启动。`);
     }        
     
-    // === 3. 点击 Billing 图标进入账单页 ===
+// === 3. 点击 Billing 图标进入账单页 ===
     console.log("🔍 点击 Billing 图标...");
     const billingBtn = page.locator('.btn-billing-compact').first();
     // const href = await billingBtn.getAttribute('href'); // 暂时未用到，注释掉保持整洁
@@ -159,7 +159,7 @@ async function sendTelegramMessage(message) {
     console.log("⏳ 已进入 Billing，等待3秒...");
     await page.waitForTimeout(3000);
 
-    // === 4. 点击 View Details 进入详情页 ===
+// === 4. 点击 View Details 进入详情页 ===
     console.log("🔍 点击 View Details...");
     await Promise.all([
       page.getByRole('link', { name: 'View Details' }).first().click(),
@@ -168,7 +168,7 @@ async function sendTelegramMessage(message) {
     console.log("⏳ 已进入详情页，等待3秒...");
     await page.waitForTimeout(3000);
     
-    // === 5. 提前提取 ID，防止页面跳转后丢失上下文 ===
+// === 5. 提前提取 ID，防止页面跳转后丢失上下文 ===
     const serverId = page.url().split('/').pop() || 'unknown';
     console.log(`🆔 解析到 Server ID: ${serverId}`); 
 
@@ -183,26 +183,26 @@ async function sendTelegramMessage(message) {
                `💡 <b>判定说明:</b> ${detail}`;
     };
 
-    // === 6. 等待异步数据加载 (直到 accumulated-time 有数字) ===    
+// === 6. 等待异步数据加载 (直到 accumulated-time 有数字) ===    
     const timeSelector = '#accumulated-time';
     await page.waitForFunction(sel => {
       const el = document.querySelector(sel);
       return el && /\d+/.test(el.textContent) && el.textContent.trim() !== '0 hours';
     }, timeSelector, { timeout: 10000 }).catch(() => console.log("⚠️ 初始时间加载超时或为0"));
 
-    // === 7. 获取当前状态 ===
+// === 7. 获取当前状态 ===
     const beforeHoursText = await page.textContent(timeSelector);
     const beforeHours = parseInt(beforeHoursText.replace(/[^0-9]/g, '')) || 0;
       
-    // === 8. 定位源代码中的 ID 按钮 ===
+// === 8. 定位源代码中的 ID 按钮 ===
     const renewBtn = page.locator('#renew-free-server-btn');
     const btnContent = await renewBtn.innerHTML();
     
-    // === 9. 逻辑判定 ===
+// === 9. 逻辑判定 ===
     console.log(`🆔 ID: ${serverId} | ⏰ 目前: ${beforeHours}h | 🔘 状态: ${btnContent.includes('Wait') ? '冷却中' : '可续期'}`);
         
     if (btnContent.includes('Wait')) {
-        // 9.1. 提取数字：从 "Wait 23 min" 中提取出 "23"
+        // 提取数字：从 "Wait 23 min" 中提取出 "23"
         const waitTime = btnContent.match(/\d+/)?.[0] || "??";           
         await sendTelegramMessage(getReport('⏳', '还在冷却中', beforeHours, `处于冷却中，剩 ${waitTime} 分钟`));
         return; 
@@ -212,15 +212,15 @@ async function sendTelegramMessage(message) {
     console.log("⚡ 启动模拟真人续期流程...");
 
     try {
-        // 1. 模拟真人“看页面”：随机滚动一下滚动条
+        // a. 模拟真人“看页面”：随机滚动一下滚动条
         await page.mouse.wheel(0, Math.floor(Math.random() * 200));
         console.log("👉 模拟页面滚动...");
         
-        // 2. 随机发呆：停顿 2-5 秒
+        // b. 随机发呆：停顿 2-5 秒
         const thinkTime = Math.floor(Math.random() * 3000) + 2000;
         await page.waitForTimeout(thinkTime);
 
-        // 3. 模拟鼠标平滑移动到按钮中心
+        // c. 模拟鼠标平滑移动到按钮中心
         const box = await renewBtn.boundingBox();
         if (box) {
             await page.mouse.move(
@@ -231,7 +231,7 @@ async function sendTelegramMessage(message) {
             console.log("👉 鼠标平滑轨迹模拟完成");
         }
 
-        // 4. 执行“三保险”点击
+        // 执行“三保险”点击
         // 第一保险：物理点击
         await renewBtn.click({ 
             force: true, 
@@ -263,8 +263,7 @@ async function sendTelegramMessage(message) {
     } catch (e) {
         console.log("🚨 点击过程异常:", e.message);
     }
-
-    // === 11. 深度等待同步 ===
+// === 11. 深度等待同步 ===
     console.log("⏳ 正在进入 20 秒深度等待，确保后端写入数据...");
     await page.waitForTimeout(20000); 
 
@@ -312,7 +311,7 @@ async function sendTelegramMessage(message) {
     
     console.log(`📊 判定数据: 之前 ${beforeHours}h -> 之后 ${afterHours}h`);
 
-    // === 13. 智能逻辑判定 ===        
+// === 13. 智能逻辑判定 ===        
     let statusIcon = '🚨';
     let statusTitle = '续期结果待核实';
     let tip = '';
@@ -344,7 +343,7 @@ async function sendTelegramMessage(message) {
         tip = `检测到时长离奇变动：从 ${beforeHours}h 变为 ${afterHours}h。建议人工检查。`;
     }
 
-    // === 14. 发送正常消息 (已自动包含 proxyStatusTag) ===
+// === 14. 发送正常消息 (已自动包含 proxyStatusTag) ===
     await sendTelegramMessage(getReport(statusIcon, statusTitle, afterHours, tip));    
 
   } catch (err) {
