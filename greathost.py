@@ -20,8 +20,7 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID") or ""
 # sock5代码，不需要留空值
 PROXY_URL = os.getenv("PROXY_UR") or ""
 
-def send_telegram(msg_type_or_text, error_msg=None):
-    """兼容你 check_proxy_ip 中使用的两种调用方式"""
+def send_telegram(msg_type_or_text, error_msg=None):    
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID: return
     
     # 构造最终发送的消息
