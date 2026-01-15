@@ -30,13 +30,14 @@ async function sendTelegramMessage(message) {
 
     let proxyStatusTag = "🌐 直连模式";
 
-    // --- 修改开始：仅支持 SOCKS5 代理启动 ---
+    // --- 修改开始：正确配置 SOCKS5 (移至 Launch 阶段) ---
     const launchOptions = { headless: true, args: ['--no-sandbox'] };
     
-    // [优化] 兼容处理：防止用户忘了写 socks5:// 前缀导致解析崩溃
+    // 1. 解析代理配置
     let proxyData = null;
     if (PROXY_URL) {
         try {
+            // 确保有协议头以便 URL 类解析
             const safeUrl = PROXY_URL.startsWith('socks') ? PROXY_URL : `socks5://${PROXY_URL}`;
             proxyData = new URL(safeUrl);
         } catch (e) {
@@ -44,26 +45,28 @@ async function sendTelegramMessage(message) {
         }
     }
 
+    // 2. 将代理配置注入到 launchOptions (关键点：在这里进行认证)
     if (proxyData) {        
-        launchOptions.proxy = { server: `socks5://${proxyData.host}` };
-        proxyStatusTag = `🔒 代理模式 (${proxyData.host})`;
-    }
-
-    const browser = await chromium.launch(launchOptions);
-
-    const context = await browser.newContext({
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        viewport: { width: 1280, height: 720 },
-        locale: 'es-ES',
-        proxy: proxyData ? {
+        launchOptions.proxy = { 
             server: `socks5://${proxyData.host}`,
             username: proxyData.username,
             password: proxyData.password
-        } : undefined
+        };
+        proxyStatusTag = `🔒 代理模式 (${proxyData.host})`;
+    }
+
+    // 3. 启动浏览器 (携带完整的代理认证信息)
+    const browser = await chromium.launch(launchOptions);
+
+    // 4. 创建上下文 (这里不再传 proxy 参数，它会自动继承浏览器的代理设置)
+    const context = await browser.newContext({
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        viewport: { width: 1280, height: 720 },
+        locale: 'es-ES'        
     });
 
     const page = await context.newPage();
-  
+      
   try {
     console.log(`🚀 任务启动 | ${proxyStatusTag}`);
 
