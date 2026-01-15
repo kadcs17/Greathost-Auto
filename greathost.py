@@ -110,28 +110,38 @@ def run_task():
         wait.until(EC.url_contains("/dashboard"))
         print("✅ 登录成功！")
 
-        # === 2. 状态检查与自动开机 (JS 1:1) ===
+     # === 2. 状态检查与自动开机 (针对新版小圆点 UI 优化) ===
         print("📊 正在检查服务器实时状态...")
         try:
-            status_text = driver.find_element(By.CSS_SELECTOR, '.status-text, .server-status').text or 'unknown'
-        except: status_text = 'unknown'
-        status_lower = status_text.strip().lower()
+            # 等待状态圆点加载出来
+            status_indicator = wait.until(EC.presence_of_element_located((By.CLASS_NAME, 'server-status-indicator')))
+            
+            # 方案 A：从 title 属性获取文字 (例如 "Running", "Stopped")
+            status_text = status_indicator.get_attribute('title') or 'unknown'
+            
+            # 方案 B：从 class 属性判断 (status-dot-running, status-dot-stopped)
+            status_class = status_indicator.get_attribute('class') or ''
+            
+            print(f"📡 实时状态抓取成功: [{status_text}] (Class: {status_class})")
+            
+            # 判定是否需要启动
+            is_offline = any(x in status_text.lower() for x in ['stopped', 'offline', 'stopped']) or \
+                         ('stopped' in status_class.lower())
 
-        if any(x in status_lower for x in ['offline', 'stopped', '离线']):
-            print(f"⚡ 检测到离线 [{status_text}]，尝试触发启动...")
-            try:
-                start_btn = driver.find_element(By.CSS_SELECTOR, 'button.btn-start[title="Start Server"]')
-                if start_btn.is_displayed() and start_btn.get_attribute('disabled') is None:
-                    start_btn.click()
-                    server_started = True
-                    print("✅ 启动指令已发出")
-                    time.sleep(1) # waitForTimeout(1000)
-                else:
-                    print("⚠️ 启动按钮可能正在冷却或未找到，跳过启动。")
-            except:
-                print("ℹ️ 辅助启动步骤轻微异常，忽略并继续后续续期...")
-        else:
-            print(f"ℹ️ 服务器状态 [{status_text}] 正常，无需启动。")
+            if is_offline:
+                print(f"⚡ 检测到服务器处于离线状态，尝试寻找启动按钮...")
+                # 注意：启动按钮可能在 card 的其他地方，或者是单独的 .btn-start
+                try:
+                    start_btn = driver.find_element(By.CSS_SELECTOR, 'button.btn-start, .action-start')
+                    if start_btn.is_enabled():
+                        start_btn.click()
+                        server_started = True
+                        print("✅ 启动指令已发出")
+                except:
+                    print("ℹ️ 未发现可点击的启动按钮，跳过自启步骤。")
+        except Exception as e:
+            print(f"⚠️ 无法获取实时状态 (可能是数据未加载): {e}")
+            status_text = 'unknown'
 
         # === 3. 点击 Billing 图标进入账单页 (增加容错与等待) ===
         print("🔍 正在定位 Billing 图标...")
