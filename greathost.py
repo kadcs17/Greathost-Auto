@@ -309,15 +309,55 @@ def run_task():
         
         print(f"📊 判定数据: 之前 {before_hours}h -> 之后 {after_hours}h")
 
-        # === 13. 智能逻辑判定 (JS 1:1) ===
+
+        # === 13.  [新增] 仅在触发启动后，折返确认最终状态 ===
+        final_status_text = "运行正常" # 默认文案
+        if server_started:
+            print("🔄 检测到曾触发启动动作，正在折返 Dashboard 确认最终状态...")
+            try:
+                driver.get("https://greathost.es/dashboard")
+                wait.until(EC.presence_of_element_located((By.CLASS_NAME, 'server-status-indicator')))
+                time.sleep(2) # 稍作等待
+                
+                # 重新抓取圆点的 title
+                final_indicator = driver.find_element(By.CLASS_NAME, 'server-status-indicator')
+                final_status_text = final_indicator.get_attribute('title') or "Unknown"
+                print(f"📡 最终状态确认: [{final_status_text}]")
+                
+                # 抓取完后，为了不影响后续逻辑，跳回续期页面或保持在此
+                # 既然已经判定完 after_hours，留在 Dashboard 也是安全的
+            except Exception as e:
+                print(f"⚠️ 最终状态同步失败: {e}")
+                final_status_text = "确认失败"
+
+        # === 14. 智能逻辑判定 (JS 1:1) ===
         is_renew_success = after_hours > before_hours
         is_maxed_out = ("5 días" in error_msg) or (before_hours >= 120) or (after_hours == before_hours and after_hours >= 108)
 
+        # 🚀 [新增逻辑] 状态与 Emoji 映射，同步小圆点颜色
+        status_map = {
+            "Running":   ["🟢", "运行中"],
+            "Starting":  ["🟡", "启动中"],
+            "Stopped":   ["🔴", "已关机"],
+            "Offline":   ["⚪", "离线"],
+            "Suspended": ["🚫", "已暂停/封禁"]
+        }
+        
+        # 构造统一的状态显示文案
+        if server_started:
+            # 如果触发过启动，使用第 13 步抓取的 final_status_text 进行映射
+            icon, name = status_map.get(final_status_text, ["❓", final_status_text])
+            status_display = f"✅ 已触发启动 ({icon} {name})"
+        else:
+            # 如果未触发启动，说明初始状态就是运行中
+            status_display = "🟢 运行正常"
+
+        # === 15. 根据结果分发通知 (保留原逻辑完整性) ===
         if is_renew_success:
             message = (f"🎉 <b>GreatHost 续期成功</b>\n\n"
                        f"🆔 <b>ID:</b> <code>{server_id}</code>\n"
                        f"⏰ <b>增加时间:</b> {before_hours} ➔ {after_hours}h\n"
-                       f"🚀 <b>服务器状态:</b> {'✅ 已触发启动' if server_started else '运行正常'}\n"
+                       f"🚀 <b>服务器状态:</b> {status_display}\n"
                        f"📅 <b>执行时间:</b> {get_now_shanghai()}")
             send_telegram(message)
             print(" ✅ 续期成功 ✅ ")
@@ -326,7 +366,7 @@ def run_task():
             message = (f"✅ <b>GreatHost 已达上限</b>\n\n"
                        f"🆔 <b>ID:</b> <code>{server_id}</code>\n"
                        f"⏰ <b>剩余时间:</b> {after_hours}h\n"
-                       f"🚀 <b>服务器状态:</b> {'✅ 已触发启动' if server_started else '运行正常'}\n"
+                       f"🚀 <b>服务器状态:</b> {status_display}\n"
                        f"📅 <b>检查时间:</b> {get_now_shanghai()}\n"
                        f"💡 <b>提示:</b> 累计时长较高，暂无需续期。")
             send_telegram(message)
@@ -336,7 +376,7 @@ def run_task():
             message = (f"⚠️ <b>GreatHost 续期未生效</b>\n\n"
                        f"🆔 <b>ID:</b> <code>{server_id}</code>\n"
                        f"⏰ <b>剩余时间:</b> {before_hours}h\n"
-                       f"🚀 <b>服务器状态:</b> {'✅ 已触发启动' if server_started else '运行中'}\n"
+                       f"🚀 <b>服务器状态:</b> {status_display}\n"
                        f"📅 <b>检查时间:</b> {get_now_shanghai()}\n"
                        f"💡 <b>提示:</b> 时间未增加，请手动检查确认。")
             send_telegram(message)
@@ -346,7 +386,7 @@ def run_task():
         # 统一打印错误日志
         print(f" ❌ 运行时错误 ❌ : {err}")
         
-        # 1. 尝试保存页面源码（用于排查为何找不到 Billing 按钮）
+        # 1. 尝试保存页面源码
         try:
             if driver:
                 with open("error_page.html", "w", encoding="utf-8") as f:
@@ -355,9 +395,8 @@ def run_task():
         except Exception as save_err:
             print(f"⚠️ 源码保存失败: {save_err}")
 
-        # 2. 发送 TG 通知 (排除掉已经在 check_proxy_ip 里发过通知的情况)
+        # 2. 发送 TG 通知
         if "Proxy Check Failed" not in str(err):
-            # 获取当前 URL 能极大帮助定位是卡在登录页还是后台页
             current_url = driver.current_url if driver else "未知"
             send_telegram(f"🚨 <b>GreatHost 脚本报错</b>\n\n<b>错误详情:</b>\n<code>{str(err)}</code>\n\n<b>📍 报错位置:</b> {current_url}")
              
