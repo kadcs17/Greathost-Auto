@@ -19,7 +19,7 @@ EMAIL = os.getenv("GREATHOST_EMAIL") or ""
 PASSWORD = os.getenv("GREATHOST_PASSWORD") or ""
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or ""
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID") or ""
-# sock5代码，不需要留空值 64行左右要填上IP头
+# sock5代码，不需要留空值
 PROXY_URL = os.getenv("PROXY_URL") or ""
 
 def send_telegram(msg_text):
