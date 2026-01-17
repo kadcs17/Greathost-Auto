@@ -175,14 +175,15 @@ def run_task():
     wait_time = random.randint(1, 100)
     print(f"⏳ 模拟真人，随机等待 {wait_time} 秒后启动...")
     time.sleep(wait_time)
-    
+
+    driver = None
     server_id = "未知"
     before_hours = 0
     after_hours = 0
-    driver = None
     server_started = False
     status_text = "Unknown"
     status_display = "🟢 运行正常"
+    get_hours = lambda text: int(re.sub(r'[^0-9]', '', text or '0')) if re.search(r'\d+', text or '') else 0
     
     try:
         driver = get_browser()        
@@ -259,18 +260,16 @@ def run_task():
         # === 3. 点击 Billing 图标 (增加随机偏移点击防止 AC 检测) ===
         print("🔍 正在定位 Billing 图标...")
         try:
-            billing_btn = wait.until(EC.element_to_be_clickable((By.CLASS_NAME, 'btn-billing-compact')))
-            
-            # 模拟真人：先滚动到视图中心
+            billing_btn = wait.until(EC.element_to_be_clickable((By.CLASS_NAME, 'btn-billing-compact')))        
             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", billing_btn)
             time.sleep(random.uniform(1, 2))
             
             # 产生一个 -5 到 +5 像素的随机偏移量
-            offset_x = random.randint(-5, 5)         
+            offset_x = random.randint(-5, 5) 
+            offset_y = random.randint(-5, 5)
             
             actions = ActionChains(driver)
             actions.move_to_element_with_offset(billing_btn, offset_x, offset_y).click().perform()
-            
             print(f"✅ 已点击 Billing (坐标偏移: {offset_x}, {offset_y})，等待3秒...")
             time.sleep(3)
         except Exception as e:
@@ -310,8 +309,7 @@ def run_task():
 
         # === 7. 获取当前状态 (JS 1:1) ===
         before_hours_text = driver.find_element(By.CSS_SELECTOR, time_selector).text
-        digits = re.sub(r'[^0-9]', '', before_hours_text or '')
-        before_hours = int(digits) if digits else 0
+        before_hours = get_hours(before_hours_text)
 
         # === 8. 定位按钮状态 (JS 1:1) ===
         renew_btn = wait.until(EC.presence_of_element_located((By.ID, "renew-free-server-btn")))
@@ -375,8 +373,7 @@ def run_task():
             wait.until(lambda d: re.search(r'\d+', d.find_element(By.CSS_SELECTOR, time_selector).text))
         except: pass
         after_hours_text = driver.find_element(By.CSS_SELECTOR, time_selector).text
-        digits_after = re.sub(r'[^0-9]', '', after_hours_text or '') 
-        after_hours = int(digits_after) if digits_after else 0
+        after_hours = get_hours(after_hours_text)
         
         print(f"📊 判定数据: 之前 {before_hours}h -> 之后 {after_hours}h")
 
