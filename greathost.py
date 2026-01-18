@@ -199,7 +199,7 @@ def renew_click(driver, wait):
     print("Waiting 20s for backend write"); time.sleep(20)
     try: driver.refresh()
     except: print("Refresh failed"); time.sleep(2)
-    return msg 
+    return msg
 
 def confirm_and_start(driver, wait):
     final = "运行正常"; started = False
@@ -245,7 +245,7 @@ def run_task():
         err_msg = renew_click(driver, wait)
         after, _ = get_hours(driver)
         print("After hours:", after)
-        
+        # 时间没变则尝试刷新一次
         if after == before:                
             time.sleep(15)
             try: 
@@ -271,20 +271,20 @@ def run_task():
             fields = [("🆔","ID",f"<code>{server_id}</code>"),("⏰","增加时间",f"{before} ➔ {after}h"),("🚀","服务器状态",status_display)]
             send_notice("renew_success", fields)
         elif is_maxed:
-            fields = [("🆔","ID",f"<code>{server_id}</code>"),("⏰","剩余时间",f"{after}h"),("🚀","服务器状态",status_display),("💡","提示","累计时长较高（已近120h），暂无需续期。")]
+            fields = [("🆔","ID",f"<code>{server_id}</code>"),("⏰","剩余时间",f"{after}h"),("🚀","服务器状态",status_display),("💡","提示","已近120h上限，暂无需续期。")]
             send_notice("maxed_out", fields)
         else:
-            fields = [("🆔","ID",f"<code>{server_id}</code>"),("⏰","剩余时间",f"{before}h"),("🚀","服务器状态",status_display),("💡","提示","时间未增加，请手动检查确认。")]
+            fields = [("🆔","ID",f"<code>{server_id}</code>"),("⏰","剩余时间",f"{before}h"),("🚀","服务器状态",status_display),("💡","提示","时间未增加，请手动确认。")]
             send_notice("renew_failed", fields)
 
     except Exception as e:
         err = str(e).replace('<','[').replace('>',']')
         print("Runtime error:", err)
-        if "BLOCK_ERR" not in err and "代理预检" not in err:
-            fields = [("🆔","ID",f"<code>{server_id}</code>"),("❌","详情",f"<code>{err}</code>"),("📍","位置", driver.current_url if driver else "未知")]
-            send_notice("business_error", fields)
-        else:
-            print("Proxy error, skip business notify.")
+        if all(k not in err for k in ["BLOCK_ERR", "代理预检"]):
+            try: loc = driver.current_url if driver else "未知"
+            except: loc = "获取失败"
+            send_notice("business_error", [("🆔","ID",f"<code>{server_id}</code>"),("❌","详情",f"<code>{err}</code>"),("📍","位置",loc)])
+        else: print("Proxy error, skip business notify.")
     finally:
         if driver:
             try: driver.quit(); print("Browser closed")
