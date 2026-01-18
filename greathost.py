@@ -222,8 +222,14 @@ def run_task():
     time.sleep(random.randint(1,60))
     driver = None; server_id = "未知"; before = 0; after = 0; status_display = "🟢 运行正常"
     try:
-        driver = get_browser()
-        check_proxy_ip(driver)
+        # 核心修改：确保 get_browser 内部能处理 PROXY_URL 为空的情况
+        # 如果 get_browser 是你定义的，请确保它内部有 if PROXY_URL: options.add_argument... 的判断
+        driver = get_browser() 
+        
+        # 如果代理为空，跳过预检（避免在直连模式下报代理预检失败）
+        if globals().get('PROXY_URL'):
+            check_proxy_ip(driver)
+        
         wait = WebDriverWait(driver, 15)
         login(driver, wait)
         simulate_human(driver, wait)
@@ -238,14 +244,12 @@ def run_task():
             m = re.search(r'\d+', btn_html); wt = m.group(0) if m else "??"
             fields = [("🆔","服务器ID",f"<code>{server_id}</code>"),("⏰","冷却时间",f"{wt} 分钟"),("📊","当前累计",f"{before}h"),("🚀","服务器状态",status_display)]
             send_notice("cooldown", fields)
-            try: driver.quit()
-            except: pass
-            return
+            return # finally 会处理 driver.quit()
 
         err_msg = renew_click(driver, wait)
         after, _ = get_hours(driver)
         print("After hours:", after)
-        # 时间没变则尝试刷新一次
+        
         if after == before:                
             time.sleep(15)
             try: 
@@ -255,15 +259,14 @@ def run_task():
             except: pass
 
         print(f"Final after hours used for 判定: {after}")
-# === 15. 状态确认与启动检测 ===
         final_status, started_flag = confirm_and_start(driver, wait)
         if started_flag:
-                icon, name = STATUS_MAP.get(final_status, ["❓", final_status])
-                status_display = f"✅ 已触发启动 ({icon} {name})"
+            icon, name = STATUS_MAP.get(final_status, ["❓", final_status])
+            status_display = f"✅ 已触发启动 ({icon} {name})"
         else:
-                icon, name = STATUS_MAP.get(final_status, ["🟢", "运行正常"])
-                status_display = f"{icon} {name}"
-# === 16. 分发最终通知 ===
+            icon, name = STATUS_MAP.get(final_status, ["🟢", "运行正常"])
+            status_display = f"{icon} {name}"
+
         is_success = after > before
         is_maxed = ("5 días" in err_msg) or (before > 108 and after == before)
                 
@@ -280,12 +283,13 @@ def run_task():
     except Exception as e:
         err = str(e).replace('<','[').replace('>',']')
         print("Runtime error:", err)
-        proxy_keys = ["BLOCK_ERR", "代理预检", "SOCKSHTTPSConnectionPool", "ConnectTimeoutError"]  # 可将报错信息中常见的代理错误关键字加入过滤，避免二次通知
+        # 关键过滤：增加 "None" 和 "specification" 拦截代理变量为空导致的报错
+        proxy_keys = ["BLOCK_ERR", "代理预检", "Pool", "Timeout", "None", "specification"]
         if all(k not in err for k in proxy_keys):
             try: loc = driver.current_url if driver else "未知"
             except: loc = "获取失败"
             send_notice("business_error", [("🆔","ID",f"<code>{server_id}</code>"),("❌","详情",f"<code>{err}</code>"),("📍","位置",loc)])
-        else: print("Proxy/Network error, skip business notify.")
+        else: print("Proxy/Network/Env error, skip business notify.")
     finally:
         if driver:
             try: driver.quit(); print("Browser closed")
