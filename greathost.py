@@ -129,7 +129,7 @@ def run_task():
             m = re.search(r"Wait\s+(\d+\s+\w+)", btn_text)
             wait_time = m.group(1) if m else btn_text
             send_notice("cooldown", [
-                ("📛", "服务器名称", target_name),
+                ("🖥️", "服务器名称", target_name),
                 ("🆔", "ID", f"<code>{server_id}</code>"),
                 ("⏳", "等待时间", wait_time),
                 ("📊", "当前累计", f"{before_h}h")
@@ -152,14 +152,14 @@ def run_task():
         # 6. 结果判定及风格化通知
         if is_success and after_h > before_h:
             send_notice("renew_success", [
-                ("📛", "服务器名称", target_name),
+                ("🖥️", "服务器名称", target_name),
                 ("🆔", "ID", f"<code>{server_id}</code>"),
                 ("⏰", "增加时间", f"{before_h} ➔ {after_h}h"),
                 ("🚀", "服务器状态", status_disp)
             ])
         elif "5 d" in str(renew_res.get('message', '')) or (before_h > 108):
             send_notice("maxed_out", [
-                ("📛", "服务器名称", target_name),
+                ("🖥️", "服务器名称", target_name),
                 ("🆔", "ID", f"<code>{server_id}</code>"),
                 ("⏰", "剩余时间", f"{after_h}h"),
                 ("🚀", "服务器状态", status_disp),
@@ -167,7 +167,7 @@ def run_task():
             ])
         else:
             send_notice("renew_failed", [
-                ("📛", "服务器名称", target_name),
+                ("🖥️", "服务器名称", target_name),
                 ("🆔", "ID", f"<code>{server_id}</code>"),
                 ("⏰", "剩余时间", f"{before_h}h"),
                 ("💡", "提示", f"时间未增加: {renew_res.get('message','未知响应')}")
@@ -175,7 +175,7 @@ def run_task():
 
     except Exception as e:
         print(f"🚨 运行异常: {e}")
-        send_notice("error", [("📛", "目标", target_name), ("❌", "故障", f"<code>{str(e)[:100]}</code>")])
+        send_notice("error", [("🖥️", "目标", target_name), ("❌", "故障", f"<code>{str(e)[:100]}</code>")])
     finally:
         if driver: driver.quit()
 
