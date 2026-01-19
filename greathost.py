@@ -145,9 +145,11 @@ def run_task():
 
         # 7. 智能判定判定部分 [按照 test2.js 逻辑]
         is_success = after_h > before_h
-        has_limit_msg = "5 días" in str(renew_res.get('message', ''))
-        has_reached_threshold = (before_h > 108 and after_h == before_h)
-        is_maxed = has_limit_msg or has_reached_threshold
+        msg_str = str(renew_res.get('message', '')).lower()
+        has_limit_msg = "5 días" in msg_str or "limit" in msg_str
+      
+        has_reached_threshold = (before_h >= 108 and after_h <= before_h)
+        is_maxed = has_limit_msg or (has_reached_threshold and renew_res.get('success'))
 
         if is_success:
             fields = [("🆔","ID",f"<code>{server_id}</code>"),("⏰","增加时间",f"{before_h} ➔ {after_h}h"),("🚀","服务器状态",status_display),("💰","当前金币",str(c_data.get('userCoins', 0)))]
