@@ -97,15 +97,34 @@ def run_task():
         driver.find_element(By.CSS_SELECTOR,"button[type='submit']").click()
         wait.until(EC.url_contains("/dashboard"))
 
-        # 2. 获取服务器列表并锁定 loveMC
+        # 2. 获取服务器列表并智能锁定目标
         res = fetch_api(driver, "/api/servers")
-        server_list = res.get('servers', [])
-        target_server = next((s for s in server_list if s.get('name') == target_name), None)
+        server_list = res.get('servers', []) 
         
-        if not target_server: raise Exception(f"未找到服务器 {target_name}")
+        # 智能锁定逻辑判定
+        if not server_list:
+            raise Exception("账号下没有找到任何服务器")
+
+        if TARGET_NAME_CONFIG:
+            # 场景 A: 配置文件里指定了名字，按名字精准匹配
+            target_server = next((s for s in server_list if s.get('name') == TARGET_NAME_CONFIG), None)
+            if not target_server:
+                raise Exception(f"未找到名称为 '{TARGET_NAME_CONFIG}' 的服务器")
+        else:
+            # 场景 B: target_name 为空
+            if len(server_list) == 1:
+                # 只有一个服务器，自动锁定
+                target_server = server_list[0]
+                print(f"💡 target_name 为空，自动锁定唯一服务器: {target_server.get('name')}")
+            else:
+                # 有多个服务器且没写名字，报错防止误操作
+                raise Exception(f"账号下存在 {len(server_list)} 个服务器，必须指定 TARGET_NAME")
+
+        # 统一变量名，方便后续 TG 通知使用
         server_id = target_server.get('id')
-        print(f"✅ 已锁定目标服务器: {target_name} (ID: {server_id})")
-        
+        current_server_name = target_server.get('name') 
+        print(f"✅ 成功锁定目标: {current_server_name} (ID: {server_id})")
+            
         # 3. 获取实时状态
         info = fetch_api(driver, f"/api/servers/{server_id}/information")
         real_status = info.get('status', 'unknown').lower()
@@ -147,7 +166,7 @@ def run_task():
         # 6. 判定并发送通知
         if is_success and after_h > before_h:
             send_notice("renew_success", [
-                ("🖥️", "服务器名称", target_name),
+                ("🖥️", "服务器名称", current_server_name),
                 ("🆔", "ID", f"<code>{server_id}</code>"),
                 ("⏰", "增加时间", f"{before_h} ➔ {after_h}h"),
                 ("🚀", "服务器状态", status_disp),
@@ -155,7 +174,7 @@ def run_task():
             ])
         elif "5 d" in str(renew_res.get('message', '')) or (before_h > 108):
             send_notice("maxed_out", [
-                ("🖥️", "服务器名称", target_name),
+                ("🖥️", "服务器名称", current_server_name),
                 ("🆔", "ID", f"<code>{server_id}</code>"),
                 ("⏰", "剩余时间", f"{after_h}h"),
                 ("🚀", "服务器状态", status_disp),
@@ -164,7 +183,7 @@ def run_task():
             ])
         else:
             send_notice("renew_failed", [
-                ("🖥️", "服务器名称", target_name),
+                ("🖥️", "服务器名称", current_server_name),
                 ("🆔", "ID", f"<code>{server_id}</code>"),
                 ("⏰", "剩余时间", f"{before_h}h"),
                 ("💡", "提示", f"时间未增加: {renew_res.get('message','未知错误')}")
@@ -172,7 +191,7 @@ def run_task():
 
     except Exception as e:
         print(f"🚨 运行异常: {e}")
-        send_notice("error", [("🖥️", "目标", target_name), ("❌", "故障", f"<code>{str(e)[:100]}</code>")])
+        send_notice("error", [("🖥️", "目标", current_server_name), ("❌", "故障", f"<code>{str(e)[:100]}</code>")])
     finally:
         if driver: driver.quit()
 
