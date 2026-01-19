@@ -113,12 +113,15 @@ def run_task():
         status_disp = f"{icon} {status_name}"
         print(f"📋 状态核对: {target_name} | {status_disp}")
 
-        # 4. 时间检查与冷却判定
+# 4. 时间检查与冷却判定
         driver.get(f"https://greathost.es/contracts/{server_id}")
         time.sleep(2)
         
-        contract = fetch_api(driver, f"/api/servers/{server_id}/contract")
-        before_h = calculate_hours(contract.get('renewalInfo', {}).get('nextRenewalDate'))
+        # 【修正点】改用 main (2).py 验证过的 renewal 接口，并增加 .get('contract') 层级
+        contract_data = fetch_api(driver, f"/api/renewal/contracts/{server_id}")
+        # 兼容性处理：优先找 contract 里的数据，找不到则看顶层
+        renewal_info = contract_data.get('contract', {}).get('renewalInfo') or contract_data.get('renewalInfo', {})
+        before_h = calculate_hours(renewal_info.get('nextRenewalDate'))
         
         btn = wait.until(EC.presence_of_element_located((By.ID, "renew-free-server-btn")))
         btn_text = btn.text.strip()
@@ -141,8 +144,14 @@ def run_task():
         renew_res = fetch_api(driver, f"/api/renewal/contracts/{server_id}/renew-free", method="POST")
         
         is_success = renew_res.get('success', False)
+        # 【修正点】续期成功后，新日期确实是在 details 字段下
         after_date = renew_res.get('details', {}).get('nextRenewalDate')
-        after_h = calculate_hours(after_date) if after_date else before_h
+        
+        # 确保 after_h 在失败时不会变成 0
+        if is_success and after_date:
+            after_h = calculate_hours(after_date)
+        else:
+            after_h = before_h
 
         # 6. 判定并发送通知
         if is_success and after_h > before_h:
