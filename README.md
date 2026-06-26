@@ -4,9 +4,9 @@
 
 📛 服务器名称: serv1
 ❌ 故障: `Message: unknown error: net::ERR_CONNECTION_CLOSED
-  (Session info: chrome=149.0.7827.196)
+  (Session info: chrome=149.0.7827.200)
 Stacktrac`
 🌐 代理状态: 已尝试直连
-📅 时间: 2026/06/26 04:03:04
+📅 时间: 2026/06/26 11:54:28
 
-> 最近更新: 2026/06/26 04:03:04
+> 最近更新: 2026/06/26 11:54:28
